@@ -11,6 +11,7 @@ namespace AutoBrowserDownloader.WpfApp.Models
         public int LastPage { get; set; } = 0;
         public List<string> ScrapedUrls { get; set; } = new List<string>();
         public string DownloadPath { get; set; } = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Downloads");
+        public ScraperConfig ScraperSettings { get; set; } = new ScraperConfig();
 
         private static string SettingsPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Settings.json");
 

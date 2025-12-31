@@ -143,21 +143,11 @@
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
                                 <TextBlock Text="Extracted Data" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
-                                <DataGrid Grid.Row="1" x:Name="ResultsGrid" AutoGenerateColumns="False" 
+                                <DataGrid Grid.Row="1" x:Name="ResultsGrid" AutoGenerateColumns="True" 
                                           HeadersVisibility="Column" GridLinesVisibility="Horizontal" 
                                           Background="White" BorderThickness="0"
-                                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="No" Binding="{Binding No}" Width="50"/>
-                                        <DataGridTextColumn Header="Name" Binding="{Binding FontName}" Width="200"/>
-                                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="150"/>
-                                        <DataGridTextColumn Header="Author" Binding="{Binding Author}" Width="150"/>
-                                        <DataGridTextColumn Header="License" Binding="{Binding License}" Width="150"/>
-                                        <DataGridTextColumn Header="License URL" Binding="{Binding LicenseUrl}" Width="200"/>
-                                        <DataGridTextColumn Header="Font Img URL" Binding="{Binding FontImgUrl}" Width="200"/>
-                                        <DataGridTextColumn Header="Font URL" Binding="{Binding FontUrl}" Width="250"/>
-                                        <DataGridTextColumn Header="DL URL" Binding="{Binding DownloadUrl}" Width="250"/>
-                                    </DataGrid.Columns>
+                                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                          AutoGeneratingColumn="ResultsGrid_AutoGeneratingColumn">
                                 </DataGrid>
                             </Grid>
                         </Border>
@@ -180,27 +170,80 @@
                     </Grid>
                 </TabItem>
 
-                <!-- Page 1: Selectors -->
-                <TabItem Header="Selectors">
-                    <Grid Margin="0,10,0,0" Background="White">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <StackPanel Orientation="Horizontal" Margin="10">
-                            <Button Content="Add Step" Click="AddStep_Click" Style="{StaticResource ModernButtonStyle}" Background="#48BB78"/>
+                <!-- Page 1: Settings / Config -->
+                <TabItem Header="Settings">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                        <StackPanel Margin="10">
+                            <!-- Scraper Configuration -->
+                            <Border Background="White" CornerRadius="12" Padding="20" Margin="0,0,0,20">
+                                <StackPanel>
+                                    <TextBlock Text="Scraper Configuration" FontWeight="Bold" FontSize="18" Foreground="#2D3748" Margin="0,0,0,20"/>
+                                    
+                                    <TextBlock Text="List Page Selectors" FontWeight="SemiBold" Foreground="#4A5568" Margin="0,0,0,10"/>
+                                    <Grid Margin="0,0,0,15">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Item Container" VerticalAlignment="Center" Margin="0,5"/>
+                                        <TextBox x:Name="CfgItemContainer" Grid.Row="0" Grid.Column="1" Padding="8" Margin="0,5" BorderBrush="#E2E8F0"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Name Selector" VerticalAlignment="Center" Margin="0,5"/>
+                                        <TextBox x:Name="CfgNameSelector" Grid.Row="1" Grid.Column="1" Padding="8" Margin="0,5" BorderBrush="#E2E8F0"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Category Selector" VerticalAlignment="Center" Margin="0,5"/>
+                                        <TextBox x:Name="CfgCategorySelector" Grid.Row="2" Grid.Column="1" Padding="8" Margin="0,5" BorderBrush="#E2E8F0"/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Image Selector" VerticalAlignment="Center" Margin="0,5"/>
+                                        <TextBox x:Name="CfgImageSelector" Grid.Row="3" Grid.Column="1" Padding="8" Margin="0,5" BorderBrush="#E2E8F0"/>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Link URL Selector" VerticalAlignment="Center" Margin="0,5"/>
+                                        <TextBox x:Name="CfgUrlSelector" Grid.Row="4" Grid.Column="1" Padding="8" Margin="0,5" BorderBrush="#E2E8F0"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Detail Page Selectors" FontWeight="SemiBold" Foreground="#4A5568" Margin="0,10,0,10"/>
+                                    <Grid Margin="0,0,0,15">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Description Selector" VerticalAlignment="Center" Margin="0,5"/>
+                                        <TextBox x:Name="CfgDescSelector" Grid.Row="0" Grid.Column="1" Padding="8" Margin="0,5" BorderBrush="#E2E8F0"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Download BTN Selector" VerticalAlignment="Center" Margin="0,5"/>
+                                        <TextBox x:Name="CfgDownloadSelector" Grid.Row="1" Grid.Column="1" Padding="8" Margin="0,5" BorderBrush="#E2E8F0"/>
+                                    </Grid>
+                                    
+                                    <Button Content="Save Configuration" Click="SaveConfig_Click" Style="{StaticResource ModernButtonStyle}" HorizontalAlignment="Right" Width="180" Height="40" Margin="0,10,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Legacy Step Editor (Optional, kept at bottom) -->
+                            <Expander Header="Advanced: Step Actions (Optional)" Background="White" Padding="10">
+                                <DataGrid x:Name="StepsGrid" AutoGenerateColumns="False" Margin="10" CanUserAddRows="True" Height="200">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Type" Binding="{Binding Type}"/>
+                                        <DataGridTextColumn Header="Selector" Binding="{Binding Selector}" Width="*"/>
+                                        <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="100"/>
+                                        <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="150"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Expander>
                         </StackPanel>
-                        <DataGrid Grid.Row="1" x:Name="StepsGrid" AutoGenerateColumns="False" Margin="10" CanUserAddRows="True">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Type" Binding="{Binding Type}"/>
-                                <DataGridTextColumn Header="Selector" Binding="{Binding Selector}" Width="*"/>
-                                <DataGridTextColumn Header="Fallback Selector" Binding="{Binding FallbackSelector}" Width="*"/>
-                                <DataGridTextColumn Header="Value (Input/Delay)" Binding="{Binding Value}" Width="100"/>
-                                <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="150"/>
-                                <DataGridCheckBoxColumn Header="Optional" Binding="{Binding IsOptional}"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </Grid>
+                    </ScrollViewer>
                 </TabItem>
 
                 <!-- Page 2: Downloader -->

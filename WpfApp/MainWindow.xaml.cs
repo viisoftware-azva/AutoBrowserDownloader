@@ -60,8 +60,33 @@ namespace AutoBrowserDownloader.WpfApp
             _settings = AppSettings.Load() ?? new AppSettings();
             UrlBox.Text = _settings.LastUrl;
             DownloadPathBox.Text = _settings.DownloadPath;
+
+            // Load Configuration UI
+            CfgItemContainer.Text = _settings.ScraperSettings.ItemContainer;
+            CfgNameSelector.Text = _settings.ScraperSettings.NameSelector;
+            CfgCategorySelector.Text = _settings.ScraperSettings.CategorySelector;
+            CfgImageSelector.Text = _settings.ScraperSettings.ImageSelector;
+            CfgUrlSelector.Text = _settings.ScraperSettings.UrlSelector;
+            CfgDescSelector.Text = _settings.ScraperSettings.DescriptionSelector;
+            CfgDownloadSelector.Text = _settings.ScraperSettings.DownloadButtonSelector;
         }
 
+
+        private void SaveConfig_Click(object sender, RoutedEventArgs e)
+        {
+            if (_settings == null) _settings = new AppSettings();
+            
+            _settings.ScraperSettings.ItemContainer = CfgItemContainer.Text;
+            _settings.ScraperSettings.NameSelector = CfgNameSelector.Text;
+            _settings.ScraperSettings.CategorySelector = CfgCategorySelector.Text;
+            _settings.ScraperSettings.ImageSelector = CfgImageSelector.Text;
+            _settings.ScraperSettings.UrlSelector = CfgUrlSelector.Text;
+            _settings.ScraperSettings.DescriptionSelector = CfgDescSelector.Text;
+            _settings.ScraperSettings.DownloadButtonSelector = CfgDownloadSelector.Text;
+
+            _settings.Save();
+            MessageBox.Show("Configuration saved successfully!");
+        }
 
         private void AddStep_Click(object sender, RoutedEventArgs e)
         {
@@ -159,19 +184,8 @@ namespace AutoBrowserDownloader.WpfApp
             {
                 this.IsEnabled = false;
 
-                // Config specific for dafontfree.io (as requested)
-                var config = new ScraperConfig
-                {
-                    ItemContainer = "article",        
-                    NameSelector = "h2 a",
-                    CategorySelector = ".cat-links a", 
-                    ImageSelector = "img",
-                    UrlSelector = "h2 a",
-                    
-                    // Detail page
-                    DescriptionSelector = ".entry-content p",
-                    DownloadButtonSelector = "a:has-text('Download')" 
-                };
+                // Use Dynamic Config from Settings
+                var config = _settings.ScraperSettings;
 
                 await runner.RunDeepScrapeAsync(url, config, false, _settings);
 
@@ -462,6 +476,75 @@ namespace AutoBrowserDownloader.WpfApp
                 this.IsEnabled = true;
                 StopDownloadBtn.IsEnabled = false;
                 StartDownloadBtn.IsEnabled = true;
+            }
+        }
+
+        private void ResultsGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
+        {
+            if (_settings == null) return;
+
+            string header = e.PropertyName;
+            var cfg = _settings.ScraperSettings;
+
+            // Mapping property names to user-friendly headers and checking if they should be visible
+            bool isVisible = true;
+            string newHeader = header;
+
+            switch (header)
+            {
+                case "No":
+                    newHeader = "No";
+                    break;
+                case "FontName":
+                    newHeader = "Name";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.NameSelector);
+                    break;
+                case "Category":
+                    newHeader = "Category";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.CategorySelector);
+                    break;
+                case "ImageUrl":
+                    newHeader = "List Image";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.ImageSelector);
+                    break;
+                case "FontUrl":
+                    newHeader = "Page URL";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.UrlSelector);
+                    break;
+                case "Description":
+                    newHeader = "Description";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.DescriptionSelector);
+                    break;
+                case "DownloadUrl":
+                    newHeader = "Direct DL URL";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.DownloadButtonSelector);
+                    break;
+                case "Author":
+                    newHeader = "Author";
+                    // Author extraction is currently heuristic, we'll keep it visible if name is visible
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.NameSelector);
+                    break;
+                case "License":
+                    newHeader = "License";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.NameSelector);
+                    break;
+                case "FontImgUrl":
+                    newHeader = "Detail Image";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.NameSelector);
+                    break;
+                case "LicenseUrl":
+                    newHeader = "License URL";
+                    isVisible = !string.IsNullOrWhiteSpace(cfg.NameSelector);
+                    break;
+            }
+
+            if (!isVisible)
+            {
+                e.Cancel = true; // Don't create the column
+            }
+            else
+            {
+                e.Column.Header = newHeader;
             }
         }
 

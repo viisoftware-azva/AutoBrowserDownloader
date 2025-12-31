@@ -17,8 +17,9 @@ namespace AutoBrowserDownloader.WpfApp
         public ObservableCollection<AutomationStep> Steps { get; set; }
         public ObservableCollection<ScrapeResult> Results { get; set; }
         public ObservableCollection<string> DownloadLogMessages { get; set; }
-        private AppSettings _settings;
+        private AppSettings? _settings;
         private string _selectedCsvPath = "";
+        private System.Threading.CancellationTokenSource? _ctsDownload;
 
 
 
@@ -38,13 +39,27 @@ namespace AutoBrowserDownloader.WpfApp
             Results = new ObservableCollection<ScrapeResult>();
             ResultsGrid.ItemsSource = Results;
 
-            // Initialize Download Log
+            // Initialize Download Progress
             DownloadLogMessages = new ObservableCollection<string>();
-            DownloadLog.ItemsSource = DownloadLogMessages;
+            DownloadLogMessages.CollectionChanged += (s, e) =>
+            {
+                if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewItems != null)
+                {
+                    Dispatcher.Invoke(() => {
+                        foreach (object? item in e.NewItems) {
+                            if (item is string msg) {
+                                DownloadLogBox.AppendText(msg + "\n");
+                            }
+                        }
+                        DownloadLogBox.ScrollToEnd();
+                    });
+                }
+            };
 
             // Load settings
-            _settings = AppSettings.Load();
+            _settings = AppSettings.Load() ?? new AppSettings();
             UrlBox.Text = _settings.LastUrl;
+            DownloadPathBox.Text = _settings.DownloadPath;
         }
 
 
@@ -55,9 +70,8 @@ namespace AutoBrowserDownloader.WpfApp
 
         private void About_Click(object sender, RoutedEventArgs e)
         {
-            var about = new AboutWindow();
-            about.Owner = this;
-            about.ShowDialog();
+            // Trigger Sidebar_Click for the AboutBtn
+            AboutBtn.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         }
 
         private void Sidebar_Click(object sender, RoutedEventArgs e)
@@ -78,6 +92,10 @@ namespace AutoBrowserDownloader.WpfApp
                 SettingsBtn.BorderThickness = new Thickness(0);
                 SettingsBtn.Foreground = grayBrush;
 
+                AboutBtn.Background = Brushes.Transparent;
+                AboutBtn.BorderThickness = new Thickness(0);
+                AboutBtn.Foreground = grayBrush;
+
                 // Set Active Style
                 btn.Background = (Brush)new BrushConverter().ConvertFrom("#2D3748");
                 btn.BorderThickness = new Thickness(4, 0, 0, 0);
@@ -97,6 +115,10 @@ namespace AutoBrowserDownloader.WpfApp
                     MainTabs.SelectedIndex = 1;
                     ScraperControls.Visibility = Visibility.Collapsed;
                 }
+                else if (btn == AboutBtn) {
+                    MainTabs.SelectedIndex = 3;
+                    ScraperControls.Visibility = Visibility.Collapsed;
+                }
             }
         }
 
@@ -109,6 +131,7 @@ namespace AutoBrowserDownloader.WpfApp
             var url = UrlBox.Text;
 
             // Save last URL used
+            if (_settings == null) _settings = new AppSettings();
             _settings.LastUrl = url;
             _settings.Save();
 
@@ -180,6 +203,7 @@ namespace AutoBrowserDownloader.WpfApp
                 {
                     _selectedCsvPath = files[0];
                     FileNameText.Text = Path.GetFileName(_selectedCsvPath);
+                    ClearFileBtn.Visibility = Visibility.Visible;
                     DownloadLogMessages.Add($"[System] Selected file: {FileNameText.Text}");
                 }
                 else
@@ -189,16 +213,62 @@ namespace AutoBrowserDownloader.WpfApp
             }
         }
 
+        private void DropZone_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog();
+            dialog.Filter = "CSV files (*.csv)|*.csv";
+            if (dialog.ShowDialog() == true)
+            {
+                _selectedCsvPath = dialog.FileName;
+                FileNameText.Text = Path.GetFileName(_selectedCsvPath);
+                ClearFileBtn.Visibility = Visibility.Visible;
+                DownloadLogMessages.Add($"[System] Selected file: {FileNameText.Text}");
+            }
+        }
+
+        private void ClearFile_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedCsvPath = "";
+            FileNameText.Text = "";
+            ClearFileBtn.Visibility = Visibility.Collapsed;
+            DownloadLogMessages.Add("[System] File selection cleared.");
+        }
+
+        private void StopDownload_Click(object sender, RoutedEventArgs e)
+        {
+            _ctsDownload?.Cancel();
+            DownloadLogMessages.Add("[System] Stopping... Please wait for the current file to finish.");
+            StopDownloadBtn.IsEnabled = false;
+        }
+
+        private void BrowseFolder_Click(object sender, RoutedEventArgs e)
+        {
+            // OpenFolderDialog is available in .NET 8.0+
+            var dialog = new Microsoft.Win32.OpenFolderDialog();
+            dialog.InitialDirectory = DownloadPathBox.Text;
+            if (dialog.ShowDialog() == true)
+            {
+                DownloadPathBox.Text = dialog.FolderName;
+                if (_settings != null)
+                {
+                    _settings.DownloadPath = dialog.FolderName;
+                    _settings.Save();
+                }
+            }
+        }
+
         private async void StartDownload_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(_selectedCsvPath) || !File.Exists(_selectedCsvPath))
             {
-                MessageBox.Show("Please drag and drop a CSV file first!");
+                MessageBox.Show("Please drag and drop or browse for a CSV file first!");
                 return;
             }
 
             try
             {
+                DownloadLogMessages.Clear();
+                DownloadLogBox.Clear();
                 DownloadLogMessages.Add("[System] Reading CSV...");
                 var lines = await File.ReadAllLinesAsync(_selectedCsvPath);
                 if (lines.Length <= 1)
@@ -254,17 +324,42 @@ namespace AutoBrowserDownloader.WpfApp
                     DownloadLogMessages.Add("[System] Warning: No specific URL column detected. Searching each row for URLs...");
                 }
 
-                var downloadDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Downloads");
+                // Get download directory from UI and save it
+                var downloadDir = DownloadPathBox.Text;
+                if (string.IsNullOrWhiteSpace(downloadDir)) downloadDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Downloads");
+                
+                if (_settings != null)
+                {
+                    _settings.DownloadPath = downloadDir;
+                    _settings.Save();
+                }
+
                 if (!Directory.Exists(downloadDir)) Directory.CreateDirectory(downloadDir);
 
                 using var client = new HttpClient();
                 client.Timeout = TimeSpan.FromMinutes(5);
 
+                _ctsDownload = new System.Threading.CancellationTokenSource();
                 this.IsEnabled = false;
-                int count = 0;
+                StopDownloadBtn.IsEnabled = true;
+                StartDownloadBtn.IsEnabled = false;
 
-                foreach (var line in lines.Skip(1))
+                int count = 0;
+                var rows = lines.Skip(1).ToList();
+                int totalRows = rows.Count;
+                DownloadProgress.Maximum = totalRows;
+                DownloadProgress.Value = 0;
+                ProgressText.Text = $"0/{totalRows}";
+
+                for (int i = 0; i < rows.Count; i++)
                 {
+                    if (_ctsDownload.Token.IsCancellationRequested)
+                    {
+                        DownloadLogMessages.Add("[System] Download process stopped by user.");
+                        break;
+                    }
+
+                    var line = rows[i];
                     // Basic split (considering quotes)
                     var parts = System.Text.RegularExpressions.Regex.Split(line, ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)")
                                     .Select(p => p.Trim('\"')).ToArray();
@@ -283,12 +378,18 @@ namespace AutoBrowserDownloader.WpfApp
                             url = parts.FirstOrDefault(p => IsUrl(p)) ?? "";
                         }
 
-                        if (string.IsNullOrEmpty(url) || url.Contains("Not Found")) continue;
+                        if (string.IsNullOrEmpty(url) || url.Contains("Not Found")) 
+                        {
+                            DownloadProgress.Value = i + 1;
+                            ProgressText.Text = $"{i + 1}/{totalRows}";
+                            continue;
+                        }
+
                         url = url.Trim().TrimEnd(';'); // Remove trailing semicolon and spaces
 
                         try
                         {
-                            var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                            var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, _ctsDownload.Token);
                             
                             // Try to get filename from Content-Disposition header
                             string fileName = response.Content.Headers.ContentDisposition?.FileName?.Trim('\"', ' ');
@@ -334,15 +435,23 @@ namespace AutoBrowserDownloader.WpfApp
                                 DownloadLogMessages.Add($"[{DateTime.Now:HH:mm:ss}] ❌ Failed: {fileName} (HTTP {response.StatusCode})");
                             }
                         }
+                        catch (OperationCanceledException)
+                        {
+                            DownloadLogMessages.Add($"[{DateTime.Now:HH:mm:ss}] ⏹️ Stopped.");
+                            break;
+                        }
                         catch (Exception ex)
                         {
                             DownloadLogMessages.Add($"[{DateTime.Now:HH:mm:ss}] ⚠️ Error: {ex.Message}");
                         }
                     }
+
+                    DownloadProgress.Value = i + 1;
+                    ProgressText.Text = $"{i + 1}/{totalRows}";
                 }
 
                 DownloadLogMessages.Add($"[System] Completed. {count} files downloaded to 'Downloads' folder.");
-                MessageBox.Show($"Download completed! {count} files saved to the Downloads folder.");
+                MessageBox.Show($"Download process finished! {count} files saved to the Downloads folder.");
             }
             catch (Exception ex)
             {
@@ -351,6 +460,8 @@ namespace AutoBrowserDownloader.WpfApp
             finally
             {
                 this.IsEnabled = true;
+                StopDownloadBtn.IsEnabled = false;
+                StartDownloadBtn.IsEnabled = true;
             }
         }
 

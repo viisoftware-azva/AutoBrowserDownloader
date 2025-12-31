@@ -10,6 +10,7 @@ namespace AutoBrowserDownloader.WpfApp.Models
         public string LastUrl { get; set; } = "https://www.dafontfree.io/";
         public int LastPage { get; set; } = 0;
         public List<string> ScrapedUrls { get; set; } = new List<string>();
+        public string DownloadPath { get; set; } = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Downloads");
 
         private static string SettingsPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Settings.json");
 

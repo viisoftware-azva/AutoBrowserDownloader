@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:AutoBrowserDownloader.WpfApp"
         mc:Ignorable="d"
-        Title="Web Scraper" Height="700" Width="1100" WindowStartupLocation="CenterScreen"
+        Title="AzvaScraper" Height="700" Width="1100" WindowStartupLocation="CenterScreen"
         Icon="/WpfApp/Assets/logo.png">
 
     <Window.Resources>
@@ -67,13 +67,13 @@
             <StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="20,30,20,40">
                      <Image Source="/WpfApp/Assets/logo.png" Width="32" Height="32" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
-                     <TextBlock Text="Web Scraper" Foreground="White" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+                     <TextBlock Text="AzvaScraper" Foreground="White" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
                 </StackPanel>
                 
                 <Button x:Name="ScraperBtn" Content="Scraper" Click="Sidebar_Click" Style="{StaticResource SidebarButtonStyle}" Background="#2D3748" Foreground="White" BorderBrush="#3182CE" BorderThickness="4,0,0,0"/>
                 <Button x:Name="DownloaderBtn" Content="Downloader" Click="Sidebar_Click" Style="{StaticResource SidebarButtonStyle}"/>
                 <Button x:Name="SettingsBtn" Content="Settings" Click="Sidebar_Click" Style="{StaticResource SidebarButtonStyle}"/>
-                <Button Content="About" Click="About_Click" Style="{StaticResource SidebarButtonStyle}"/>
+                <Button x:Name="AboutBtn" Content="About" Click="Sidebar_Click" Style="{StaticResource SidebarButtonStyle}"/>
             </StackPanel>
         </Border>
 
@@ -208,6 +208,7 @@
                     <Grid Margin="0,20,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
@@ -228,8 +229,23 @@
                                     Visibility="Collapsed" Style="{StaticResource ModernButtonStyle}"/>
                         </Grid>
 
+                        <!-- Download Path Selector -->
+                        <Border Grid.Row="1" Background="White" CornerRadius="12" Padding="20" Margin="0,0,0,20">
+                            <StackPanel>
+                                <TextBlock Text="Download Subdirectory" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="DownloadPathBox" Padding="10" VerticalContentAlignment="Center" BorderBrush="#E2E8F0" BorderThickness="1"/>
+                                    <Button Grid.Column="1" Content="Browse" Click="BrowseFolder_Click" Style="{StaticResource ModernButtonStyle}" Margin="10,0,0,0" Padding="15,0" Height="40"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Download Status -->
-                        <Border Grid.Row="1" Background="White" CornerRadius="12" Padding="20">
+                        <Border Grid.Row="2" Background="White" CornerRadius="12" Padding="20">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -261,6 +277,21 @@
                             </Grid>
                         </Border>
                     </Grid>
+                </TabItem>
+
+                <!-- Page 3: About -->
+                <TabItem Header="About">
+                    <Border Background="White" CornerRadius="12" Margin="0,20,0,0" Padding="30">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Image Source="/WpfApp/Assets/logo.png" Width="120" Height="120" Margin="0,0,0,30" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock Text="AzvaScraper" FontSize="28" FontWeight="Bold" Foreground="#2D3748" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Version 1.0.0" FontSize="16" Foreground="#718096" HorizontalAlignment="Center" Margin="0,10,0,0"/>
+                            <TextBlock Text="A powerful automated web scraping and downloading tool." FontSize="14" Foreground="#A0AEC0" HorizontalAlignment="Center" Margin="0,20,0,0" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="400"/>
+                            <Separator Margin="0,40" Background="#E2E8F0" Height="1"/>
+                            <TextBlock Text="© 2025 ViiSoftware" FontSize="14" Foreground="#CBD5E0" HorizontalAlignment="Center"/>
+                            <TextBlock Text="All Rights Reserved" FontSize="12" Foreground="#E2E8F0" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
                 </TabItem>
             </TabControl>
         </Grid>

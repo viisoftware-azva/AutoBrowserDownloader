@@ -26,7 +26,7 @@
             
             <Image Source="/WpfApp/Assets/logo.png" Width="100" Height="100" Margin="0,0,0,20"/>
             
-            <TextBlock Text="Auto Browser Downloader" FontSize="20" FontWeight="Bold" Foreground="#2D3748" HorizontalAlignment="Center"/>
+            <TextBlock Text="AzvaScraper" FontSize="20" FontWeight="Bold" Foreground="#2D3748" HorizontalAlignment="Center"/>
             <TextBlock x:Name="VersionText" Text="Version 1.0.0" FontSize="14" Foreground="#718096" HorizontalAlignment="Center" Margin="0,5,0,0"/>
             
             <TextBlock Text="© 2025 ViiSoftware" FontSize="12" Foreground="#CBD5E0" HorizontalAlignment="Center" Margin="0,30,0,0"/>

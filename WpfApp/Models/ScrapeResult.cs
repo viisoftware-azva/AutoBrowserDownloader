@@ -5,11 +5,13 @@ namespace AutoBrowserDownloader.WpfApp.Models
     public class ScrapeResult
     {
         public int No { get; set; }
-        public string FontName { get; set; }
-        public string Category { get; set; }
-        public string ImageUrl { get; set; }
-        public string FontUrl { get; set; }
-        public string Description { get; set; }
-        public string DownloadUrl { get; set; }
+        public string FontName { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public string ImageUrl { get; set; } = string.Empty;
+        public string FontUrl { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string DownloadUrl { get; set; } = string.Empty;
+        public string Author { get; set; } = string.Empty;
+        public string License { get; set; } = string.Empty;
     }
 }

@@ -15,6 +15,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="WpfApp\Assets\logo.png" />
+  </ItemGroup>
   
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <Exec Command="powershell -ExecutionPolicy Bypass -File &quot;$(TargetDir)playwright.ps1&quot; install" />

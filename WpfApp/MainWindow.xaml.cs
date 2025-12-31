@@ -33,6 +33,13 @@ namespace AutoBrowserDownloader.WpfApp
             Steps.Add(new AutomationStep { Type = ActionType.Wait, Value = "1000", Description = "New Step" });
         }
 
+        private void About_Click(object sender, RoutedEventArgs e)
+        {
+            var about = new AboutWindow();
+            about.Owner = this;
+            about.ShowDialog();
+        }
+
         private async void Start_Click(object sender, RoutedEventArgs e)
         {
             LogBox.Text = ""; 

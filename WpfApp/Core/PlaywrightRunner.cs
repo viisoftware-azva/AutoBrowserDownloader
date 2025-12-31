@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Playwright;
 using AutoBrowserDownloader.WpfApp.Models;
@@ -111,27 +113,117 @@ namespace AutoBrowserDownloader.WpfApp.Core
 
                         Log($"Visiting: {res.FontUrl}...");
                         await page.GotoAsync(res.FontUrl);
+                        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+
+                        // --- 1. Extract Category from H2 ---
+                        // User Logic: "Adelora Serif Font" -> "Serif" (word before Font)
+                        var h2El = await page.QuerySelectorAsync("h2");
+                        if (h2El != null)
+                        {
+                            var h2Text = (await h2El.InnerTextAsync()).Trim();
+                            // Logic: Remove " Font" from end, take the last word
+                            var cleanText = Regex.Replace(h2Text, @"\s+Font$", "", RegexOptions.IgnoreCase);
+                            var parts = cleanText.Split(' ');
+                            if (parts.Length > 0)
+                            {
+                                res.Category = parts.Last();
+                            }
+                        }
+
+                        // --- 2. Extract Author / Contact ---
+                        // User Logic: "before <h2> there is link or email"
+                        // We'll try to get the text of the element immediately preceding the H2
+                        var authorText = await page.EvaluateAsync<string>(@"() => {
+                            const h2 = document.querySelector('h2');
+                            if (!h2) return '';
+                            let prev = h2.previousElementSibling;
+                            // Traverse back until we find something substantial
+                            while(prev && prev.innerText.trim().length === 0) {
+                                prev = prev.previousElementSibling;
+                            }
+                            return prev ? prev.innerText.trim() : '';
+                        }");
+                        if (!string.IsNullOrEmpty(authorText))
+                        {
+                            res.Author = authorText;
+                        }
+
+                        // --- 3. Extract License ---
+                        // Look for element containing "License"
+                        var licenseEl = await page.QuerySelectorAsync("text=/License/i");
+                        if (licenseEl != null)
+                        {
+                            // Try to get the full text of that element or its parent
+                            var text = await licenseEl.InnerTextAsync();
+                            // If just 'License', maybe next sibling? For now, grab the text line.
+                            // Cleaner: split by newline/colon
+                            res.License = text.Replace("License", "").Replace(":", "").Trim();
+                        }
                         
+                        // --- 4. Description ---
                         if (!string.IsNullOrEmpty(config.DescriptionSelector))
                         {
                             var descEl = await page.QuerySelectorAsync(config.DescriptionSelector);
                             if (descEl != null) 
                             {
                                 var text = await descEl.InnerTextAsync();
-                                res.Description = text.Length > 100 ? text.Substring(0, 100).Replace("\n", " ") + "..." : text;
+                                res.Description = text.Length > 150 ? text.Substring(0, 150).Replace("\n", " ") + "..." : text;
                             }
                         }
 
+                        // --- 5. Real Download Link ---
+                        // User Logic: Button leads to a page, real link is on that page.
+                        string preDownloadUrl = null;
                         if (!string.IsNullOrEmpty(config.DownloadButtonSelector))
                         {
                             var dlEl = await page.QuerySelectorAsync(config.DownloadButtonSelector);
-                            if (dlEl != null) res.DownloadUrl = await dlEl.GetAttributeAsync("href");
+                            if (dlEl != null) preDownloadUrl = await dlEl.GetAttributeAsync("href");
                         }
-                        
-                        if (string.IsNullOrEmpty(res.DownloadUrl)) res.DownloadUrl = "Not Found";
+
+                        if (!string.IsNullOrEmpty(preDownloadUrl))
+                        {
+                            Log($"  > Follow download link: {preDownloadUrl}...");
+                            // Check if it's absolute or relative
+                            if (!preDownloadUrl.StartsWith("http"))
+                            {
+                                var uri = new Uri(new Uri(res.FontUrl), preDownloadUrl);
+                                preDownloadUrl = uri.ToString();
+                            }
+
+                            await page.GotoAsync(preDownloadUrl);
+                            await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+                            
+                            // Now find the REAL download link (usually .zip, .rar, .ttf, .otf)
+                            // Or a link that contains "download" but is NOT the one we just clicked (heuristic)
+                            
+                            // 1. Try to find a link ending in common font extensions
+                            var finalLink = await page.QuerySelectorAsync("a[href$='.zip'], a[href$='.rar'], a[href$='.ttf'], a[href$='.otf']");
+                            
+                            // 2. Fallback: Try a link text "Click here to download" or similar
+                            if (finalLink == null)
+                            {
+                                finalLink = await page.QuerySelectorAsync("a:has-text('Click here')");
+                            }
+
+                            if (finalLink != null)
+                            {
+                                res.DownloadUrl = await finalLink.GetAttributeAsync("href");
+                            }
+                            else
+                            {
+                                // Maybe the previous button was the direct link after all? 
+                                // Or we failed to find it. Just use current URL or mark not found.
+                                res.DownloadUrl = "Not Found on Page 2";
+                            }
+                        }
+                        else
+                        {
+                            res.DownloadUrl = "No Initial Button";
+                        }
 
                         OnResultFound?.Invoke(res);
-                        await page.WaitForTimeoutAsync(1000); 
+                        // Be nice to the server
+                        await page.WaitForTimeoutAsync(500); 
                     }
                     catch (Exception ex)
                     {
@@ -142,15 +234,34 @@ namespace AutoBrowserDownloader.WpfApp.Core
                 // 4. Save to CSV
                 try 
                 {
-                    var csvPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scraped_fonts.csv");
-                    var csvLines = new List<string> { "No,Name,Category,FontUrl,DownloadUrl,Description" };
-                    foreach(var r in basicResults)
+                    string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                    string csvPath = System.IO.Path.Combine(baseDir, "scraped_fonts.csv");
+                    
+                    int fileCounter = 0;
+                    bool saved = false;
+
+                    while (!saved && fileCounter < 100)
                     {
-                        string SafeCsv(string s) => s?.Replace("\"", "\"\"") ?? "";
-                        csvLines.Add($"{r.No},\"{SafeCsv(r.FontName)}\",\"{SafeCsv(r.Category)}\",\"{SafeCsv(r.FontUrl)}\",\"{SafeCsv(r.DownloadUrl)}\",\"{SafeCsv(r.Description)}\"");
+                        try 
+                        {
+                            var csvLines = new List<string> { "No,Name,Category,Author,License,FontUrl,DownloadUrl,Description" };
+                            foreach(var r in basicResults)
+                            {
+                                string SafeCsv(string s) => s?.Replace("\"", "\"\"") ?? "";
+                                csvLines.Add($"{r.No},\"{SafeCsv(r.FontName)}\",\"{SafeCsv(r.Category)}\",\"{SafeCsv(r.Author)}\",\"{SafeCsv(r.License)}\",\"{SafeCsv(r.FontUrl)}\",\"{SafeCsv(r.DownloadUrl)}\",\"{SafeCsv(r.Description)}\"");
+                            }
+                            await System.IO.File.WriteAllLinesAsync(csvPath, csvLines);
+                            Log($"Saved results to {System.IO.Path.GetFileName(csvPath)}");
+                            saved = true;
+                        }
+                        catch (System.IO.IOException)
+                        {
+                            fileCounter++;
+                            csvPath = System.IO.Path.Combine(baseDir, $"scraped_fonts_{fileCounter}.csv");
+                        }
                     }
-                    await System.IO.File.WriteAllLinesAsync(csvPath, csvLines);
-                    Log($"Saved results to {csvPath}");
+
+                    if (!saved) Log("Failed to save CSV after multiple attempts.");
                 }
                 catch(Exception ex)
                 {

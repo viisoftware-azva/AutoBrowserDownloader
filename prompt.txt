@@ -1,0 +1,2 @@
+Kamu tau kan project ini untuk apa? aku beri tahu ya, bahwa project ini untuk download otomatis font yang ada di www.ifonts.xyz
+nah di MainWindow.xaml itu ada url bisa input manual dan ada tombol start. ketika tombol tersebut di klik, maka akan membuka browser yang ada di windows, jadi bukan dalam aplikasi itu sendiri. makanya pakai playwrigt. kamu buatkan juga template final production, Bundle jadi 1 exe (tanpa Node install), Bikin GUI step editor, Anti selector break strategy, dan pastinya works!

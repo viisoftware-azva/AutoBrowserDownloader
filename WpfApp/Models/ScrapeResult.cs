@@ -13,5 +13,7 @@ namespace AutoBrowserDownloader.WpfApp.Models
         public string DownloadUrl { get; set; } = string.Empty;
         public string Author { get; set; } = string.Empty;
         public string License { get; set; } = string.Empty;
+        public string FontImgUrl { get; set; } = string.Empty;
+        public string LicenseUrl { get; set; } = string.Empty;
     }
 }

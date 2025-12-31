@@ -13,17 +13,21 @@ namespace AutoBrowserDownloader.WpfApp.Core
         public event Action<string>? OnLog;
         public event Action<ScrapeResult>? OnResultFound;
 
-        public async Task RunAsync(string url, List<AutomationStep> steps, bool headless = false)
+        public async Task RunAsync(string url, List<AutomationStep> steps, bool headless, AppSettings settings)
         {
-            await RunDeepScrapeAsync(url, new ScraperConfig(), headless);
+            await RunDeepScrapeAsync(url, new ScraperConfig(), headless, settings);
         }
 
-        public async Task RunDeepScrapeAsync(string startUrl, ScraperConfig config, bool headless)
+        public async Task RunDeepScrapeAsync(string startUrl, ScraperConfig config, bool headless, AppSettings settings)
         {
             try
             {
                 // Ensure dependencies are installed
                 await DependencyInstaller.EnsurePlaywrightInstalledAsync(Log);
+
+                // Initialize high-level counter if needed
+                int resultCounter = settings.ScrapedUrls.Count + 1;
+                HashSet<string> seenUrls = new HashSet<string>(settings.ScrapedUrls);
 
                 // Launch Browser
                 using var playwright = await Playwright.CreateAsync();
@@ -51,54 +55,79 @@ namespace AutoBrowserDownloader.WpfApp.Core
                 var context = await browser.NewContextAsync(new BrowserNewContextOptions { ViewportSize = ViewportSize.NoViewport });
                 var page = await context.NewPageAsync();
 
-                Log($"Navigating to {startUrl}...");
-                await page.GotoAsync(startUrl, new PageGotoOptions { Timeout = 60000 });
-                try { await page.WaitForLoadStateAsync(LoadState.NetworkIdle); } catch { Log("Network idle timeout, continuing..."); }
-
-                // 1. Find all items in the list
-                Log($"Scanning for items using selector: '{config.ItemContainer}'...");
-                var items = await page.QuerySelectorAllAsync(config.ItemContainer);
-                
-                if (items.Count == 0)
-                {
-                    Log("No items found! Check selectors.");
-                }
-                else
-                {
-                    Log($"Found {items.Count} items. Extracting basic info...");
-                }
-
                 var basicResults = new List<ScrapeResult>();
-                int counter = 1;
+                
+                int startPage = settings.LastPage + 1;
+                int endPage = startPage + 9; // Crawl 10 pages relative to where we left off
 
-                // 2. Extract basic info and URLs from Listing Page
-                foreach (var item in items)
+                // --- PAGINATION LOOP ---
+                for (int pageNum = startPage; pageNum <= endPage; pageNum++)
                 {
-                    var result = new ScrapeResult { No = counter++ };
+                    string currentUrl = startUrl;
+                    if (pageNum > 1)
+                    {
+                        currentUrl = startUrl.TrimEnd('/') + $"/page/{pageNum}/";
+                    }
+
+                    Log($"--- Processing Page {pageNum}: {currentUrl} ---");
                     
                     try 
                     {
-                        var nameEl = await item.QuerySelectorAsync(config.NameSelector);
-                        if (nameEl != null) result.FontName = (await nameEl.InnerTextAsync()).Trim();
+                        await page.GotoAsync(currentUrl, new PageGotoOptions { Timeout = 60000 });
+                        try { await page.WaitForLoadStateAsync(LoadState.NetworkIdle); } catch { }
 
-                        var catEl = await item.QuerySelectorAsync(config.CategorySelector);
-                        if (catEl != null) result.Category = (await catEl.InnerTextAsync()).Trim();
-
-                        var imgEl = await item.QuerySelectorAsync(config.ImageSelector);
-                        if (imgEl != null) result.ImageUrl = await imgEl.GetAttributeAsync("src");
-
-                        var urlEl = await item.QuerySelectorAsync(config.UrlSelector);
-                        if (urlEl != null) result.FontUrl = await urlEl.GetAttributeAsync("href");
-
-                        if (!string.IsNullOrEmpty(result.FontUrl))
+                        var items = await page.QuerySelectorAllAsync(config.ItemContainer);
+                        if (items.Count == 0)
                         {
-                            basicResults.Add(result);
-                            Log($"Found: {result.FontName}");
+                            Log($"No items found on page {pageNum}. Ending pagination.");
+                            break;
                         }
+
+                        Log($"Found {items.Count} items on page {pageNum}.");
+
+                        foreach (var item in items)
+                        {
+                            try 
+                            {
+                                var urlEl = await item.QuerySelectorAsync(config.UrlSelector);
+                                if (urlEl != null) 
+                                {
+                                    string fontUrl = await urlEl.GetAttributeAsync("href") ?? "";
+                                    if (!string.IsNullOrEmpty(fontUrl))
+                                    {
+                                        if (seenUrls.Contains(fontUrl))
+                                        {
+                                            // Skip already scraped
+                                            continue;
+                                        }
+
+                                        var result = new ScrapeResult { No = resultCounter++ };
+                                        result.FontUrl = fontUrl;
+
+                                        var nameEl = await item.QuerySelectorAsync(config.NameSelector);
+                                        if (nameEl != null) result.FontName = (await nameEl.InnerTextAsync()).Trim();
+
+                                        var catEl = await item.QuerySelectorAsync(config.CategorySelector);
+                                        if (catEl != null) result.Category = (await catEl.InnerTextAsync()).Trim();
+
+                                        var imgEl = await item.QuerySelectorAsync(config.ImageSelector);
+                                        if (imgEl != null) result.ImageUrl = await imgEl.GetAttributeAsync("src") ?? "";
+
+                                        basicResults.Add(result);
+                                    }
+                                }
+                            }
+                            catch (Exception ex) { Log($"  Error extracting item summary: {ex.Message}"); }
+                        }
+
+                        // Update current page in settings and save after each list page processed
+                        settings.LastPage = pageNum;
+                        settings.Save();
                     }
-                    catch (Exception ex) 
-                    { 
-                        Log($"Error extracting item: {ex.Message}"); 
+                    catch (Exception ex)
+                    {
+                        Log($"  Failed to load list page {pageNum}: {ex.Message}. Stopping pagination.");
+                        break; 
                     }
                 }
 
@@ -149,15 +178,25 @@ namespace AutoBrowserDownloader.WpfApp.Core
                         }
 
                         // --- 3. Extract License ---
-                        // Look for element containing "License"
                         var licenseEl = await page.QuerySelectorAsync("text=/License/i");
                         if (licenseEl != null)
                         {
-                            // Try to get the full text of that element or its parent
                             var text = await licenseEl.InnerTextAsync();
-                            // If just 'License', maybe next sibling? For now, grab the text line.
-                            // Cleaner: split by newline/colon
                             res.License = text.Replace("License", "").Replace(":", "").Trim();
+                        }
+
+                        // --- 3.1 Extract FontImgUrl (First image on page) ---
+                        var firstImg = await page.QuerySelectorAsync(".entry-content img, article img");
+                        if (firstImg != null)
+                        {
+                            res.FontImgUrl = await firstImg.GetAttributeAsync("src") ?? "";
+                        }
+
+                        // --- 3.2 Extract LicenseUrl (Link inside <strong>HERE</strong>) ---
+                        var hereEl = await page.QuerySelectorAsync("strong:has-text('HERE') a, a:has(strong:has-text('HERE'))");
+                        if (hereEl != null)
+                        {
+                            res.LicenseUrl = await hereEl.GetAttributeAsync("href") ?? "";
                         }
                         
                         // --- 4. Description ---
@@ -221,6 +260,10 @@ namespace AutoBrowserDownloader.WpfApp.Core
                             res.DownloadUrl = "No Initial Button";
                         }
 
+                        // Mark as scraped and save to settings
+                        settings.ScrapedUrls.Add(res.FontUrl);
+                        settings.Save();
+
                         OnResultFound?.Invoke(res);
                         // Be nice to the server
                         await page.WaitForTimeoutAsync(500); 
@@ -244,11 +287,11 @@ namespace AutoBrowserDownloader.WpfApp.Core
                     {
                         try 
                         {
-                            var csvLines = new List<string> { "No,Name,Category,Author,License,FontUrl,DownloadUrl,Description" };
+                            var csvLines = new List<string> { "No,Name,Category,Author,License,LicenseUrl,FontImgUrl,FontUrl,DownloadUrl,Description" };
                             foreach(var r in basicResults)
                             {
                                 string SafeCsv(string s) => s?.Replace("\"", "\"\"") ?? "";
-                                csvLines.Add($"{r.No},\"{SafeCsv(r.FontName)}\",\"{SafeCsv(r.Category)}\",\"{SafeCsv(r.Author)}\",\"{SafeCsv(r.License)}\",\"{SafeCsv(r.FontUrl)}\",\"{SafeCsv(r.DownloadUrl)}\",\"{SafeCsv(r.Description)}\"");
+                                csvLines.Add($"{r.No},\"{SafeCsv(r.FontName)}\",\"{SafeCsv(r.Category)}\",\"{SafeCsv(r.Author)}\",\"{SafeCsv(r.License)}\",\"{SafeCsv(r.LicenseUrl)}\",\"{SafeCsv(r.FontImgUrl)}\",\"{SafeCsv(r.FontUrl)}\",\"{SafeCsv(r.DownloadUrl)}\",\"{SafeCsv(r.Description)}\"");
                             }
                             await System.IO.File.WriteAllLinesAsync(csvPath, csvLines);
                             Log($"Saved results to {System.IO.Path.GetFileName(csvPath)}");

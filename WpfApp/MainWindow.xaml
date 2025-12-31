@@ -70,10 +70,9 @@
                      <TextBlock Text="Web Scraper" Foreground="White" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
                 </StackPanel>
                 
-                <Button Content="Project 1" Style="{StaticResource SidebarButtonStyle}" Background="#2D3748" Foreground="White" BorderBrush="#3182CE" BorderThickness="4,0,0,0"/>
-                <Button Content="Scheduler" Style="{StaticResource SidebarButtonStyle}"/>
-                <Button Content="Browser" Style="{StaticResource SidebarButtonStyle}"/>
-                <Button Content="Settings" Style="{StaticResource SidebarButtonStyle}"/>
+                <Button x:Name="ScraperBtn" Content="Scraper" Click="Sidebar_Click" Style="{StaticResource SidebarButtonStyle}" Background="#2D3748" Foreground="White" BorderBrush="#3182CE" BorderThickness="4,0,0,0"/>
+                <Button x:Name="DownloaderBtn" Content="Downloader" Click="Sidebar_Click" Style="{StaticResource SidebarButtonStyle}"/>
+                <Button x:Name="SettingsBtn" Content="Settings" Click="Sidebar_Click" Style="{StaticResource SidebarButtonStyle}"/>
                 <Button Content="About" Click="About_Click" Style="{StaticResource SidebarButtonStyle}"/>
             </StackPanel>
         </Border>
@@ -86,7 +85,7 @@
             </Grid.RowDefinitions>
 
             <!-- Top Header & Controls -->
-            <StackPanel Grid.Row="0" Margin="20" Background="White">
+            <StackPanel Grid.Row="0" Margin="20" Background="White" x:Name="ScraperControls">
                 <Border Background="White" CornerRadius="8" Padding="15">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="15" Direction="270" ShadowDepth="2" Opacity="0.1" Color="Black"/>
@@ -117,8 +116,16 @@
             </StackPanel>
 
             <!-- Main Dashboard Area -->
-            <TabControl Grid.Row="1" Margin="20,0,20,20" BorderThickness="0" Background="Transparent" SelectedIndex="0">
-                <TabItem Header="Dashboard" FontSize="14">
+            <TabControl x:Name="MainTabs" Grid.Row="1" Margin="20,0,20,20" BorderThickness="0" Background="Transparent" SelectedIndex="0">
+                <!-- Hide Headers to integrate with Sidebar -->
+                <TabControl.ItemContainerStyle>
+                    <Style TargetType="TabItem">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                    </Style>
+                </TabControl.ItemContainerStyle>
+
+                <!-- Page 0: Dashboard -->
+                <TabItem Header="Dashboard">
                     <Grid Margin="0,10,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="2*"/>
@@ -146,6 +153,8 @@
                                         <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="150"/>
                                         <DataGridTextColumn Header="Author" Binding="{Binding Author}" Width="150"/>
                                         <DataGridTextColumn Header="License" Binding="{Binding License}" Width="150"/>
+                                        <DataGridTextColumn Header="License URL" Binding="{Binding LicenseUrl}" Width="200"/>
+                                        <DataGridTextColumn Header="Font Img URL" Binding="{Binding FontImgUrl}" Width="200"/>
                                         <DataGridTextColumn Header="Font URL" Binding="{Binding FontUrl}" Width="250"/>
                                         <DataGridTextColumn Header="DL URL" Binding="{Binding DownloadUrl}" Width="250"/>
                                     </DataGrid.Columns>
@@ -171,7 +180,8 @@
                     </Grid>
                 </TabItem>
 
-                <TabItem Header="Selectors (Config)" FontSize="14">
+                <!-- Page 1: Selectors -->
+                <TabItem Header="Selectors">
                     <Grid Margin="0,10,0,0" Background="White">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -190,6 +200,66 @@
                                 <DataGridCheckBoxColumn Header="Optional" Binding="{Binding IsOptional}"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                    </Grid>
+                </TabItem>
+
+                <!-- Page 2: Downloader -->
+                <TabItem Header="Downloader">
+                    <Grid Margin="0,20,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Drop Zone -->
+                        <Grid Grid.Row="0" Margin="0,0,0,20">
+                            <Border x:Name="DropZone" Height="180" Background="White" BorderBrush="#CBD5E0" BorderThickness="2" CornerRadius="12"
+                                    AllowDrop="True" Drop="DropZone_Drop" PreviewDragOver="DropZone_DragOver" MouseLeftButtonUp="DropZone_Click" Cursor="Hand">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="📁" FontSize="42" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Drag &amp; Drop CSV File Here" FontSize="16" FontWeight="SemiBold" Foreground="#4A5568" Margin="0,5,0,2"/>
+                                    <TextBlock Text="or click to browse" FontSize="13" Foreground="#A0AEC0" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="FileNameText" FontSize="14" Foreground="#3182CE" FontWeight="Bold" Margin="0,8,0,0" TextAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <!-- Clear Button (X) -->
+                            <Button x:Name="ClearFileBtn" Content="✕" Click="ClearFile_Click" VerticalAlignment="Top" HorizontalAlignment="Right" 
+                                    Margin="10" Width="30" Height="30" Background="#FC8181" Foreground="White" FontWeight="Bold" 
+                                    Visibility="Collapsed" Style="{StaticResource ModernButtonStyle}"/>
+                        </Grid>
+
+                        <!-- Download Status -->
+                        <Border Grid.Row="1" Background="White" CornerRadius="12" Padding="20">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Download Progress" FontWeight="Bold" FontSize="16" Margin="0,0,0,15"/>
+                                
+                                <TextBox Grid.Row="1" x:Name="DownloadLogBox" Background="#F7FAFC" Foreground="#4A5568" BorderThickness="0" 
+                                         IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12" Margin="0,0,0,15"/>
+
+                                <!-- Progress section -->
+                                <Grid Grid.Row="2" Margin="0,0,0,15">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ProgressBar x:Name="DownloadProgress" Height="10" Foreground="#48BB78" Background="#E2E8F0" BorderThickness="0"/>
+                                    <TextBlock x:Name="ProgressText" Grid.Column="1" Text="0/0" Margin="10,0,0,0" Foreground="#718096" VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button x:Name="StopDownloadBtn" Content="Stop" Click="StopDownload_Click" Style="{StaticResource ModernButtonStyle}" 
+                                            Background="#A0AEC0" Width="100" Height="40" Margin="0,0,10,0" IsEnabled="False"/>
+                                    <Button x:Name="StartDownloadBtn" Content="Start Downloading" Click="StartDownload_Click" Style="{StaticResource ModernButtonStyle}" 
+                                            Background="#3182CE" Width="150" Height="40"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                     </Grid>
                 </TabItem>
             </TabControl>

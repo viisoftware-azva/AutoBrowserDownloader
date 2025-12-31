@@ -7,7 +7,8 @@
         WindowStyle="None"
         Background="White"
         BorderBrush="#3182CE"
-        BorderThickness="1">
+        BorderThickness="1"
+        Icon="/WpfApp/Assets/logo.png">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>

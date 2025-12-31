@@ -5,7 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:AutoBrowserDownloader.WpfApp"
         mc:Ignorable="d"
-        Title="Web Scraper" Height="700" Width="1100" WindowStartupLocation="CenterScreen">
+        Title="Web Scraper" Height="700" Width="1100" WindowStartupLocation="CenterScreen"
+        Icon="/WpfApp/Assets/logo.png">
 
     <Window.Resources>
         <Style x:Key="SidebarButtonStyle" TargetType="Button">
@@ -124,48 +125,31 @@
                             <RowDefinition Height="1*"/>
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.5*"/>
-                            <ColumnDefinition Width="1*"/>
+                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
                         <!-- Extracted Data -->
-                        <Border Grid.Row="0" Grid.Column="0" Background="White" CornerRadius="8" Margin="0,0,10,10" Padding="15">
+                        <Border Grid.Row="0" Grid.Column="0" Background="White" CornerRadius="8" Margin="0,0,0,10" Padding="15">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
                                 <TextBlock Text="Extracted Data" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
-                                <DataGrid Grid.Row="1" x:Name="ResultsGrid" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" Background="White" BorderThickness="0">
+                                <DataGrid Grid.Row="1" x:Name="ResultsGrid" AutoGenerateColumns="False" 
+                                          HeadersVisibility="Column" GridLinesVisibility="Horizontal" 
+                                          Background="White" BorderThickness="0"
+                                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                                     <DataGrid.Columns>
-                                        <DataGridTextColumn Header="No" Binding="{Binding No}" Width="40"/>
-                                        <DataGridTextColumn Header="Name" Binding="{Binding FontName}" Width="*"/>
-                                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100"/>
-                                        <DataGridTextColumn Header="Font URL" Binding="{Binding FontUrl}" Width="150"/>
-                                        <DataGridTextColumn Header="DL URL" Binding="{Binding DownloadUrl}" Width="150"/>
+                                        <DataGridTextColumn Header="No" Binding="{Binding No}" Width="50"/>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding FontName}" Width="200"/>
+                                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="150"/>
+                                        <DataGridTextColumn Header="Author" Binding="{Binding Author}" Width="150"/>
+                                        <DataGridTextColumn Header="License" Binding="{Binding License}" Width="150"/>
+                                        <DataGridTextColumn Header="Font URL" Binding="{Binding FontUrl}" Width="250"/>
+                                        <DataGridTextColumn Header="DL URL" Binding="{Binding DownloadUrl}" Width="250"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
-                            </Grid>
-                        </Border>
-
-                        <!-- Browser Preview -->
-                        <Border Grid.Row="0" Grid.Column="1" Background="White" CornerRadius="8" Margin="10,0,0,10" Padding="15">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <TextBlock Text="Browser Preview" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
-                                <Border Grid.Row="1" Background="#F0F4F8" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="4">
-                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                        <TextBlock Text="Initial Browser Preview" Foreground="#A0AEC0" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="(Live View Placeholder)" Foreground="#CBD5E0" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                                    </StackPanel>
-                                </Border>
-                                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0" HorizontalAlignment="Right">
-                                    <Button Content="Inspect" Style="{StaticResource ModernButtonStyle}" Background="#4299E1" FontSize="12" Padding="10,5"/>
-                                </StackPanel>
                             </Grid>
                         </Border>
 

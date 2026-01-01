@@ -154,8 +154,7 @@ namespace AutoBrowserDownloader.WpfApp.Core
 
                          Log($"Visiting: {res.FontUrl}...");
                          await page.GotoAsync(res.FontUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000 });
-                         try { await page.WaitForTimeoutAsync(1000); } catch { } // Extra breath for JS populating things
-                        // Ubah jadi 500 kalau 1000 terlalu lama
+                         try { await page.WaitForTimeoutAsync(settings.ScrapeDelay); } catch { } // Extra breath for JS populating things
                         
                         // --- 1. Extract Category from H2 ---
                         // User Logic: "Adelora Serif Font" -> "Serif" (word before Font)
@@ -243,7 +242,7 @@ namespace AutoBrowserDownloader.WpfApp.Core
                             }
 
                              await page.GotoAsync(preDownloadUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000 });
-                             try { await page.WaitForTimeoutAsync(500); } catch { }
+                             try { await page.WaitForTimeoutAsync(settings.ScrapeDelay / 2); } catch { }
                             
                             // Now find the REAL download link (usually .zip, .rar, .ttf, .otf)
                             // Or a link that contains "download" but is NOT the one we just clicked (heuristic)

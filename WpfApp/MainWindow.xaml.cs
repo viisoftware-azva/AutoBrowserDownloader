@@ -62,6 +62,7 @@ namespace AutoBrowserDownloader.WpfApp
             UrlBox.Text = _settings.LastUrl;
             DownloadPathBox.Text = _settings.DownloadPath;
             PagesBox.Text = _settings.PagesToScrape.ToString();
+            DelayBox.Text = _settings.ScrapeDelay.ToString();
 
             // Load Configuration UI
             CfgItemContainer.Text = _settings.ScraperSettings.ItemContainer;
@@ -171,6 +172,7 @@ namespace AutoBrowserDownloader.WpfApp
             if (_settings == null) _settings = new AppSettings();
             _settings.LastUrl = url;
             if (int.TryParse(PagesBox.Text, out int pc)) _settings.PagesToScrape = pc;
+            if (int.TryParse(DelayBox.Text, out int dc)) _settings.ScrapeDelay = dc;
             _settings.Save();
 
             // Handle Reset or Resume

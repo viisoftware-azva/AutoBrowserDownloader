@@ -59,7 +59,7 @@
 -   Enter the target URL in the sidebar.
 -   The scraper is pre-configured for high-authority download sites but can be adapted via `ScraperConfig.cs`.
 -   Monitor live results in the **Dashboard** and logs in the bottom panel.
--   Results are automatically saved to `scraped_fonts.csv`.
+-   Results are automatically saved to `output_result.csv`.
 
 ### 2. Smart Downloader
 -   Navigate to the **Downloader** tab.

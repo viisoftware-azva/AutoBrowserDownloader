@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:AutoBrowserDownloader.WpfApp"
         mc:Ignorable="d"
         Title="AzvaScraper" Height="700" Width="1100" WindowStartupLocation="CenterScreen"
-        Icon="/WpfApp/Assets/logo.png">
+        Icon="/WpfApp/Assets/logo_fancy.png">
 
     <Window.Resources>
         <Style x:Key="SidebarButtonStyle" TargetType="Button">
@@ -66,7 +66,7 @@
         <Border Grid.Column="0" Background="#1A202C">
             <StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="20,30,20,40">
-                     <Image Source="/WpfApp/Assets/logo.png" Width="32" Height="32" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                     <Image Source="/WpfApp/Assets/logo_fancy.png" Width="32" Height="32" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
                      <TextBlock Text="AzvaScraper" Foreground="White" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
                 </StackPanel>
                 
@@ -100,15 +100,21 @@
                             <TextBox x:Name="UrlBox" Grid.Column="1" Text="https://www.dafontfree.io/" Padding="10,8" BorderBrush="#E2E8F0" BorderThickness="1"/>
                         </Grid>
                         
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
+                            <CheckBox x:Name="ResumeCheck" Content="Resume from Last Page (Saved: Page 0)" Foreground="#718096" VerticalAlignment="Center" IsChecked="True"/>
+                        </StackPanel>
+                        
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Content="Start" Click="Start_Click" Style="{StaticResource ModernButtonStyle}" Background="#4299E1" Width="80"/>
-                            <Button Content="Stop"  Margin="10,0,0,0" Style="{StaticResource ModernButtonStyle}" Background="#A0AEC0" Width="80"/>
+                            <Button x:Name="StartScrapeBtn" Content="Start" Click="Start_Click" Style="{StaticResource ModernButtonStyle}" Background="#4299E1" Width="80"/>
+                            <Button x:Name="StopScrapeBtn" Content="Stop" Click="StopScrape_Click" Margin="10,0,0,0" Style="{StaticResource ModernButtonStyle}" Background="#A0AEC0" Width="80"/>
                             
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="30,0,0,0">
                                 <TextBlock Text="Delay (ms)" Foreground="#718096" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                 <TextBox Text="1000" Width="60" Padding="5" BorderBrush="#E2E8F0" Margin="0,0,15,0"/>
                                 <TextBlock Text="Threads" Foreground="#718096" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                <TextBox Text="3" Width="40" Padding="5" BorderBrush="#E2E8F0"/>
+                                <TextBox Text="3" Width="40" Padding="5" BorderBrush="#E2E8F0" Margin="0,0,15,0"/>
+                                <TextBlock Text="Pages" Foreground="#718096" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBox x:Name="PagesBox" Text="10" Width="40" Padding="5" BorderBrush="#E2E8F0"/>
                             </StackPanel>
                         </StackPanel>
                     </StackPanel>
@@ -282,7 +288,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBox x:Name="DownloadPathBox" Padding="10" VerticalContentAlignment="Center" BorderBrush="#E2E8F0" BorderThickness="1"/>
-                                    <Button Grid.Column="1" Content="Browse" Click="BrowseFolder_Click" Style="{StaticResource ModernButtonStyle}" Margin="10,0,0,0" Padding="15,0" Height="40"/>
+                                    <Button x:Name="BrowseFolderBtn" Grid.Column="1" Content="Browse" Click="BrowseFolder_Click" Style="{StaticResource ModernButtonStyle}" Margin="10,0,0,0" Padding="15,0" Height="40"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -326,7 +332,7 @@
                 <TabItem Header="About">
                     <Border Background="White" CornerRadius="12" Margin="0,20,0,0" Padding="30">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Image Source="/WpfApp/Assets/logo.png" Width="120" Height="120" Margin="0,0,0,30" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <Image Source="/WpfApp/Assets/logo_fancy.png" Width="120" Height="120" Margin="0,0,0,30" RenderOptions.BitmapScalingMode="HighQuality"/>
                             <TextBlock Text="AzvaScraper" FontSize="28" FontWeight="Bold" Foreground="#2D3748" HorizontalAlignment="Center"/>
                             <TextBlock Text="Version 1.0.0" FontSize="16" Foreground="#718096" HorizontalAlignment="Center" Margin="0,10,0,0"/>
                             <TextBlock Text="A powerful automated web scraping and downloading tool." FontSize="14" Foreground="#A0AEC0" HorizontalAlignment="Center" Margin="0,20,0,0" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="400"/>

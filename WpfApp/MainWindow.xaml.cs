@@ -20,6 +20,7 @@ namespace AutoBrowserDownloader.WpfApp
         private AppSettings? _settings;
         private string _selectedCsvPath = "";
         private System.Threading.CancellationTokenSource? _ctsDownload;
+        private System.Threading.CancellationTokenSource? _ctsScrape;
 
 
 
@@ -60,6 +61,7 @@ namespace AutoBrowserDownloader.WpfApp
             _settings = AppSettings.Load() ?? new AppSettings();
             UrlBox.Text = _settings.LastUrl;
             DownloadPathBox.Text = _settings.DownloadPath;
+            PagesBox.Text = _settings.PagesToScrape.ToString();
 
             // Load Configuration UI
             CfgItemContainer.Text = _settings.ScraperSettings.ItemContainer;
@@ -69,6 +71,10 @@ namespace AutoBrowserDownloader.WpfApp
             CfgUrlSelector.Text = _settings.ScraperSettings.UrlSelector;
             CfgDescSelector.Text = _settings.ScraperSettings.DescriptionSelector;
             CfgDownloadSelector.Text = _settings.ScraperSettings.DownloadButtonSelector;
+
+            // Update Resume Info
+            ResumeCheck.Content = $"Resume from Last Page (Saved: Page {_settings.LastPage})";
+            ResumeCheck.IsChecked = _settings.LastPage > 0;
         }
 
 
@@ -104,7 +110,7 @@ namespace AutoBrowserDownloader.WpfApp
             if (sender is Button btn)
             {
                 // Reset styles
-                var grayBrush = (Brush)new BrushConverter().ConvertFrom("#CBD5E0");
+                var grayBrush = (Brush)new BrushConverter().ConvertFrom("#CBD5E0")!;
                 ScraperBtn.Background = Brushes.Transparent;
                 ScraperBtn.BorderThickness = new Thickness(0);
                 ScraperBtn.Foreground = grayBrush;
@@ -122,9 +128,9 @@ namespace AutoBrowserDownloader.WpfApp
                 AboutBtn.Foreground = grayBrush;
 
                 // Set Active Style
-                btn.Background = (Brush)new BrushConverter().ConvertFrom("#2D3748");
+                btn.Background = (Brush)new BrushConverter().ConvertFrom("#2D3748")!;
                 btn.BorderThickness = new Thickness(4, 0, 0, 0);
-                btn.BorderBrush = (Brush)new BrushConverter().ConvertFrom("#3182CE");
+                btn.BorderBrush = (Brush)new BrushConverter().ConvertFrom("#3182CE")!;
                 btn.Foreground = Brushes.White;
 
                 // Navigate
@@ -148,6 +154,12 @@ namespace AutoBrowserDownloader.WpfApp
         }
 
 
+        private void StopScrape_Click(object sender, RoutedEventArgs e)
+        {
+            _ctsScrape?.Cancel();
+            LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] Status: Stopping scraper... Please wait for current task to finish.\n");
+        }
+
         private async void Start_Click(object sender, RoutedEventArgs e)
         {
             LogBox.Text = ""; 
@@ -158,7 +170,27 @@ namespace AutoBrowserDownloader.WpfApp
             // Save last URL used
             if (_settings == null) _settings = new AppSettings();
             _settings.LastUrl = url;
+            if (int.TryParse(PagesBox.Text, out int pc)) _settings.PagesToScrape = pc;
             _settings.Save();
+
+            // Handle Reset or Resume
+            if (ResumeCheck.IsChecked == false)
+            {
+                _settings.LastPage = 0;
+                _settings.ScrapedUrls.Clear();
+                _settings.Save();
+                LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] Status: Resetting progress, starting from Page 1.\n");
+            }
+            else
+            {
+                LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] Status: Resuming from Page {_settings.LastPage + 1}.\n");
+            }
+
+            // Set UI State
+            StartScrapeBtn.IsEnabled = false;
+            StopScrapeBtn.IsEnabled = true;
+            UrlBox.IsEnabled = false;
+            SidebarControlsEnabled(false);
 
             var runner = new PlaywrightRunner();
 
@@ -182,15 +214,23 @@ namespace AutoBrowserDownloader.WpfApp
 
             try
             {
-                this.IsEnabled = false;
+                _ctsScrape = new System.Threading.CancellationTokenSource();
 
                 // Use Dynamic Config from Settings
-                var config = _settings.ScraperSettings;
+                var config = _settings!.ScraperSettings;
 
-                await runner.RunDeepScrapeAsync(url, config, false, _settings);
-
+                await runner.RunDeepScrapeAsync(url, config, false, _settings, _ctsScrape.Token);
                 
                 LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] Status: All operations completed.\n");
+                
+                // Update Resume UI Info
+                Dispatcher.Invoke(() => {
+                    ResumeCheck.Content = $"Resume from Last Page (Saved: Page {_settings.LastPage})";
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                LogBox.AppendText($"[{DateTime.Now:HH:mm:ss}] Status: Scrape stopped by user.\n");
             }
             catch (Exception ex)
             {
@@ -198,7 +238,13 @@ namespace AutoBrowserDownloader.WpfApp
             }
             finally
             {
-                this.IsEnabled = true;
+                StartScrapeBtn.IsEnabled = true;
+                StopScrapeBtn.IsEnabled = false;
+                UrlBox.IsEnabled = true;
+                SidebarControlsEnabled(true);
+                
+                _ctsScrape?.Dispose();
+                _ctsScrape = null;
             }
         }
 
@@ -354,9 +400,13 @@ namespace AutoBrowserDownloader.WpfApp
                 client.Timeout = TimeSpan.FromMinutes(5);
 
                 _ctsDownload = new System.Threading.CancellationTokenSource();
-                this.IsEnabled = false;
-                StopDownloadBtn.IsEnabled = true;
+                
+                // Set UI State
                 StartDownloadBtn.IsEnabled = false;
+                StopDownloadBtn.IsEnabled = true;
+                BrowseFolderBtn.IsEnabled = false;
+                DropZone.AllowDrop = false;
+                SidebarControlsEnabled(false);
 
                 int count = 0;
                 var rows = lines.Skip(1).ToList();
@@ -406,7 +456,7 @@ namespace AutoBrowserDownloader.WpfApp
                             var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, _ctsDownload.Token);
                             
                             // Try to get filename from Content-Disposition header
-                            string fileName = response.Content.Headers.ContentDisposition?.FileName?.Trim('\"', ' ');
+                            string? fileName = response.Content.Headers.ContentDisposition?.FileName?.Trim('\"', ' ');
                             
                             // Fallback to URL path
                             if (string.IsNullOrEmpty(fileName))
@@ -473,10 +523,23 @@ namespace AutoBrowserDownloader.WpfApp
             }
             finally
             {
-                this.IsEnabled = true;
-                StopDownloadBtn.IsEnabled = false;
                 StartDownloadBtn.IsEnabled = true;
+                StopDownloadBtn.IsEnabled = false;
+                BrowseFolderBtn.IsEnabled = true;
+                DropZone.AllowDrop = true;
+                SidebarControlsEnabled(true);
+
+                _ctsDownload?.Dispose();
+                _ctsDownload = null;
             }
+        }
+
+        private void SidebarControlsEnabled(bool enabled)
+        {
+            ScraperBtn.IsEnabled = enabled;
+            DownloaderBtn.IsEnabled = enabled;
+            SettingsBtn.IsEnabled = enabled;
+            AboutBtn.IsEnabled = enabled;
         }
 
         private void ResultsGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)

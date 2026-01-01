@@ -13,12 +13,12 @@ namespace AutoBrowserDownloader.WpfApp.Core
         public event Action<string>? OnLog;
         public event Action<ScrapeResult>? OnResultFound;
 
-        public async Task RunAsync(string url, List<AutomationStep> steps, bool headless, AppSettings settings)
+        public async Task RunAsync(string url, List<AutomationStep> steps, bool headless, AppSettings settings, System.Threading.CancellationToken ct = default)
         {
-            await RunDeepScrapeAsync(url, new ScraperConfig(), headless, settings);
+            await RunDeepScrapeAsync(url, new ScraperConfig(), headless, settings, ct);
         }
 
-        public async Task RunDeepScrapeAsync(string startUrl, ScraperConfig config, bool headless, AppSettings settings)
+        public async Task RunDeepScrapeAsync(string startUrl, ScraperConfig config, bool headless, AppSettings settings, System.Threading.CancellationToken ct = default)
         {
             try
             {
@@ -58,11 +58,12 @@ namespace AutoBrowserDownloader.WpfApp.Core
                 var basicResults = new List<ScrapeResult>();
                 
                 int startPage = settings.LastPage + 1;
-                int endPage = startPage + 9; // Crawl 10 pages relative to where we left off
+                int endPage = startPage + (settings.PagesToScrape - 1); 
 
-                // --- PAGINATION LOOP ---
                 for (int pageNum = startPage; pageNum <= endPage; pageNum++)
                 {
+                    if (ct.IsCancellationRequested) break;
+
                     string currentUrl = startUrl;
                     if (pageNum > 1)
                     {
@@ -95,6 +96,14 @@ namespace AutoBrowserDownloader.WpfApp.Core
                                     string fontUrl = await urlEl.GetAttributeAsync("href") ?? "";
                                     if (!string.IsNullOrEmpty(fontUrl))
                                     {
+                                        if (!fontUrl.StartsWith("http"))
+                                        {
+                                            try {
+                                                var uri = new Uri(new Uri(page.Url), fontUrl);
+                                                fontUrl = uri.ToString();
+                                            } catch { }
+                                        }
+
                                         if (seenUrls.Contains(fontUrl))
                                         {
                                             // Skip already scraped
@@ -114,6 +123,7 @@ namespace AutoBrowserDownloader.WpfApp.Core
                                         if (imgEl != null) result.ImageUrl = await imgEl.GetAttributeAsync("src") ?? "";
 
                                         basicResults.Add(result);
+                                        seenUrls.Add(fontUrl); // Prevent duplicates in the same batch
                                     }
                                 }
                             }
@@ -136,14 +146,17 @@ namespace AutoBrowserDownloader.WpfApp.Core
                 
                 foreach (var res in basicResults)
                 {
+                    if (ct.IsCancellationRequested) break;
+
                     try 
                     {
                         if (string.IsNullOrEmpty(res.FontUrl)) continue;
 
-                        Log($"Visiting: {res.FontUrl}...");
-                        await page.GotoAsync(res.FontUrl);
-                        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
-
+                         Log($"Visiting: {res.FontUrl}...");
+                         await page.GotoAsync(res.FontUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000 });
+                         try { await page.WaitForTimeoutAsync(1000); } catch { } // Extra breath for JS populating things
+                        // Ubah jadi 500 kalau 1000 terlalu lama
+                        
                         // --- 1. Extract Category from H2 ---
                         // User Logic: "Adelora Serif Font" -> "Serif" (word before Font)
                         var h2El = await page.QuerySelectorAsync("h2");
@@ -212,7 +225,7 @@ namespace AutoBrowserDownloader.WpfApp.Core
 
                         // --- 5. Real Download Link ---
                         // User Logic: Button leads to a page, real link is on that page.
-                        string preDownloadUrl = null;
+                        string? preDownloadUrl = null;
                         if (!string.IsNullOrEmpty(config.DownloadButtonSelector))
                         {
                             var dlEl = await page.QuerySelectorAsync(config.DownloadButtonSelector);
@@ -223,14 +236,14 @@ namespace AutoBrowserDownloader.WpfApp.Core
                         {
                             Log($"  > Follow download link: {preDownloadUrl}...");
                             // Check if it's absolute or relative
-                            if (!preDownloadUrl.StartsWith("http"))
+                            if (!preDownloadUrl!.StartsWith("http"))
                             {
-                                var uri = new Uri(new Uri(res.FontUrl), preDownloadUrl);
+                                var uri = new Uri(new Uri(res.FontUrl!), preDownloadUrl);
                                 preDownloadUrl = uri.ToString();
                             }
 
-                            await page.GotoAsync(preDownloadUrl);
-                            await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+                             await page.GotoAsync(preDownloadUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000 });
+                             try { await page.WaitForTimeoutAsync(500); } catch { }
                             
                             // Now find the REAL download link (usually .zip, .rar, .ttf, .otf)
                             // Or a link that contains "download" but is NOT the one we just clicked (heuristic)
@@ -246,7 +259,7 @@ namespace AutoBrowserDownloader.WpfApp.Core
 
                             if (finalLink != null)
                             {
-                                res.DownloadUrl = await finalLink.GetAttributeAsync("href");
+                                res.DownloadUrl = await finalLink.GetAttributeAsync("href") ?? "Download URL missing";
                             }
                             else
                             {
@@ -278,7 +291,7 @@ namespace AutoBrowserDownloader.WpfApp.Core
                 try 
                 {
                     string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                    string csvPath = System.IO.Path.Combine(baseDir, "scraped_fonts.csv");
+                    string csvPath = System.IO.Path.Combine(baseDir, "output_result.csv");
                     
                     int fileCounter = 0;
                     bool saved = false;
@@ -287,20 +300,35 @@ namespace AutoBrowserDownloader.WpfApp.Core
                     {
                         try 
                         {
-                            var csvLines = new List<string> { "No,Name,Category,Author,License,LicenseUrl,FontImgUrl,FontUrl,DownloadUrl,Description" };
-                            foreach(var r in basicResults)
+                            bool fileExists = System.IO.File.Exists(csvPath);
+                            var csvLines = new List<string>();
+                            
+                            if (!fileExists)
                             {
+                                csvLines.Add("No,Name,Category,Author,License,LicenseUrl,FontImgUrl,FontUrl,DownloadUrl,Description");
+                            }
+
+                             foreach(var r in basicResults)
+                            {
+                                // "Smart" filter: only save if we at least reached the detail page successfully 
+                                // (If DownloadUrl is empty/null, it means detail scrape failed or was skipped)
+                                if (string.IsNullOrEmpty(r.DownloadUrl)) continue;
+
                                 string SafeCsv(string s) => s?.Replace("\"", "\"\"") ?? "";
                                 csvLines.Add($"{r.No},\"{SafeCsv(r.FontName)}\",\"{SafeCsv(r.Category)}\",\"{SafeCsv(r.Author)}\",\"{SafeCsv(r.License)}\",\"{SafeCsv(r.LicenseUrl)}\",\"{SafeCsv(r.FontImgUrl)}\",\"{SafeCsv(r.FontUrl)}\",\"{SafeCsv(r.DownloadUrl)}\",\"{SafeCsv(r.Description)}\"");
                             }
-                            await System.IO.File.WriteAllLinesAsync(csvPath, csvLines);
-                            Log($"Saved results to {System.IO.Path.GetFileName(csvPath)}");
+
+                            if (csvLines.Count > 0)
+                            {
+                                await System.IO.File.AppendAllLinesAsync(csvPath, csvLines);
+                                Log($"Saved/Appended {basicResults.Count} results to {System.IO.Path.GetFileName(csvPath)}");
+                            }
                             saved = true;
                         }
                         catch (System.IO.IOException)
                         {
                             fileCounter++;
-                            csvPath = System.IO.Path.Combine(baseDir, $"scraped_fonts_{fileCounter}.csv");
+                            csvPath = System.IO.Path.Combine(baseDir, $"output_result_{fileCounter}.csv");
                         }
                     }
 

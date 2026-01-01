@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <Resource Include="WpfApp\Assets\logo.png" />
+    <Resource Include="WpfApp\Assets\logo_fancy.png" />
   </ItemGroup>
   
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">

@@ -417,6 +417,8 @@ namespace AutoBrowserDownloader.WpfApp
                 DownloadProgress.Value = 0;
                 ProgressText.Text = $"0/{totalRows}";
 
+                int consecutiveEmptyRows = 0;
+
                 for (int i = 0; i < rows.Count; i++)
                 {
                     if (_ctsDownload.Token.IsCancellationRequested)
@@ -446,10 +448,22 @@ namespace AutoBrowserDownloader.WpfApp
 
                         if (string.IsNullOrEmpty(url) || url.Contains("Not Found")) 
                         {
+                            consecutiveEmptyRows++;
+                            if (consecutiveEmptyRows >= 5)
+                            {
+                                DownloadLogMessages.Add($"[{DateTime.Now:HH:mm:ss}] ⚠️ 5 consecutive empty rows found. Stopping process.");
+                                break;
+                            }
+
+                            DownloadLogMessages.Add($"[{DateTime.Now:HH:mm:ss}] ℹ️ Row {i + 2} is empty. Checking next... (Attempt {consecutiveEmptyRows}/5)");
+                            
                             DownloadProgress.Value = i + 1;
                             ProgressText.Text = $"{i + 1}/{totalRows}";
                             continue;
                         }
+
+                        // Reset counter if we found a valid URL
+                        consecutiveEmptyRows = 0;
 
                         url = url.Trim().TrimEnd(';'); // Remove trailing semicolon and spaces
 
@@ -493,6 +507,10 @@ namespace AutoBrowserDownloader.WpfApp
                             {
                                 var bytes = await response.Content.ReadAsByteArrayAsync();
                                 await File.WriteAllBytesAsync(Path.Combine(downloadDir, fileName), bytes);
+                                
+                                // Log to CSV
+                                await AppendToDownloadLog(downloadDir, fileName);
+
                                 DownloadLogMessages.Add($"[{DateTime.Now:HH:mm:ss}] ✅ Success: {fileName}");
                                 count++;
                             }
@@ -618,6 +636,29 @@ namespace AutoBrowserDownloader.WpfApp
             if (string.IsNullOrWhiteSpace(text)) return false;
             return Uri.TryCreate(text, UriKind.Absolute, out var uriResult)
                 && (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps);
+        }
+
+
+        private async Task AppendToDownloadLog(string downloadDir, string fileName)
+        {
+            try
+            {
+                string logPath = Path.Combine(downloadDir, "nama-download.csv");
+                string line = $"\"{fileName}\"\n";
+                
+                // If file doesn't exist, add header
+                if (!File.Exists(logPath))
+                {
+                    await File.WriteAllTextAsync(logPath, "FileName\n");
+                }
+                
+                await File.AppendAllTextAsync(logPath, line);
+            }
+            catch (Exception ex)
+            {
+                // Silently fail or log to console for background logging tool
+                System.Diagnostics.Debug.WriteLine($"Error logging download: {ex.Message}");
+            }
         }
 
     }

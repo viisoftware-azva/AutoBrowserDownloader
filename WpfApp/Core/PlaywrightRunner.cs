@@ -142,149 +142,127 @@ namespace AutoBrowserDownloader.WpfApp.Core
                 }
 
                 // 3. Visit each URL to get details
-                Log($"Collected {basicResults.Count} links. Starting detail scrape...");
+                Log($"Collected {basicResults.Count} links. Starting detail scrape with {settings.MaxThreads} threads...");
                 
+                var semaphore = new System.Threading.SemaphoreSlim(settings.MaxThreads);
+                var tasks = new List<Task>();
+
                 foreach (var res in basicResults)
                 {
                     if (ct.IsCancellationRequested) break;
-
-                    try 
+                    
+                    await semaphore.WaitAsync(ct);
+                    
+                    tasks.Add(Task.Run(async () => 
                     {
-                        if (string.IsNullOrEmpty(res.FontUrl)) continue;
-
-                         Log($"Visiting: {res.FontUrl}...");
-                         await page.GotoAsync(res.FontUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000 });
-                         try { await page.WaitForTimeoutAsync(settings.ScrapeDelay); } catch { } // Extra breath for JS populating things
-                        
-                        // --- 1. Extract Category from H2 ---
-                        // User Logic: "Adelora Serif Font" -> "Serif" (word before Font)
-                        var h2El = await page.QuerySelectorAsync("h2");
-                        if (h2El != null)
+                        IPage? detailPage = null;
+                        try 
                         {
-                            var h2Text = (await h2El.InnerTextAsync()).Trim();
-                            // Logic: Remove " Font" from end, take the last word
-                            var cleanText = Regex.Replace(h2Text, @"\s+Font$", "", RegexOptions.IgnoreCase);
-                            var parts = cleanText.Split(' ');
-                            if (parts.Length > 0)
-                            {
-                                res.Category = parts.Last();
-                            }
-                        }
+                            if (string.IsNullOrEmpty(res.FontUrl)) return;
 
-                        // --- 2. Extract Author / Contact ---
-                        // User Logic: "before <h2> there is link or email"
-                        // We'll try to get the text of the element immediately preceding the H2
-                        var authorText = await page.EvaluateAsync<string>(@"() => {
-                            const h2 = document.querySelector('h2');
-                            if (!h2) return '';
-                            let prev = h2.previousElementSibling;
-                            // Traverse back until we find something substantial
-                            while(prev && prev.innerText.trim().length === 0) {
-                                prev = prev.previousElementSibling;
-                            }
-                            return prev ? prev.innerText.trim() : '';
-                        }");
-                        if (!string.IsNullOrEmpty(authorText))
-                        {
-                            res.Author = authorText;
-                        }
-
-                        // --- 3. Extract License ---
-                        var licenseEl = await page.QuerySelectorAsync("text=/License/i");
-                        if (licenseEl != null)
-                        {
-                            var text = await licenseEl.InnerTextAsync();
-                            res.License = text.Replace("License", "").Replace(":", "").Trim();
-                        }
-
-                        // --- 3.1 Extract FontImgUrl (First image on page) ---
-                        var firstImg = await page.QuerySelectorAsync(".entry-content img, article img");
-                        if (firstImg != null)
-                        {
-                            res.FontImgUrl = await firstImg.GetAttributeAsync("src") ?? "";
-                        }
-
-                        // --- 3.2 Extract LicenseUrl (Link inside <strong>HERE</strong>) ---
-                        var hereEl = await page.QuerySelectorAsync("strong:has-text('HERE') a, a:has(strong:has-text('HERE'))");
-                        if (hereEl != null)
-                        {
-                            res.LicenseUrl = await hereEl.GetAttributeAsync("href") ?? "";
-                        }
-                        
-                        // --- 4. Description ---
-                        if (!string.IsNullOrEmpty(config.DescriptionSelector))
-                        {
-                            var descEl = await page.QuerySelectorAsync(config.DescriptionSelector);
-                            if (descEl != null) 
-                            {
-                                var text = await descEl.InnerTextAsync();
-                                res.Description = text.Length > 150 ? text.Substring(0, 150).Replace("\n", " ") + "..." : text;
-                            }
-                        }
-
-                        // --- 5. Real Download Link ---
-                        // User Logic: Button leads to a page, real link is on that page.
-                        string? preDownloadUrl = null;
-                        if (!string.IsNullOrEmpty(config.DownloadButtonSelector))
-                        {
-                            var dlEl = await page.QuerySelectorAsync(config.DownloadButtonSelector);
-                            if (dlEl != null) preDownloadUrl = await dlEl.GetAttributeAsync("href");
-                        }
-
-                        if (!string.IsNullOrEmpty(preDownloadUrl))
-                        {
-                            Log($"  > Follow download link: {preDownloadUrl}...");
-                            // Check if it's absolute or relative
-                            if (!preDownloadUrl!.StartsWith("http"))
-                            {
-                                var uri = new Uri(new Uri(res.FontUrl!), preDownloadUrl);
-                                preDownloadUrl = uri.ToString();
-                            }
-
-                             await page.GotoAsync(preDownloadUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000 });
-                             try { await page.WaitForTimeoutAsync(settings.ScrapeDelay / 2); } catch { }
+                            detailPage = await context.NewPageAsync();
+                            Log($"Visiting: {res.FontUrl}...");
+                            await detailPage.GotoAsync(res.FontUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000 });
+                            try { await detailPage.WaitForTimeoutAsync(settings.ScrapeDelay); } catch { } 
                             
-                            // Now find the REAL download link (usually .zip, .rar, .ttf, .otf)
-                            // Or a link that contains "download" but is NOT the one we just clicked (heuristic)
-                            
-                            // 1. Try to find a link ending in common font extensions
-                            var finalLink = await page.QuerySelectorAsync("a[href$='.zip'], a[href$='.rar'], a[href$='.ttf'], a[href$='.otf']");
-                            
-                            // 2. Fallback: Try a link text "Click here to download" or similar
-                            if (finalLink == null)
+                            // --- 1. Extract Category from H2 ---
+                            var h2El = await detailPage.QuerySelectorAsync("h2");
+                            if (h2El != null)
                             {
-                                finalLink = await page.QuerySelectorAsync("a:has-text('Click here')");
+                                var h2Text = (await h2El.InnerTextAsync()).Trim();
+                                var cleanText = Regex.Replace(h2Text, @"\s+Font$", "", RegexOptions.IgnoreCase);
+                                var parts = cleanText.Split(' ');
+                                if (parts.Length > 0) res.Category = parts.Last();
                             }
 
-                            if (finalLink != null)
+                            // --- 2. Extract Author / Contact ---
+                            var authorText = await detailPage.EvaluateAsync<string>(@"() => {
+                                const h2 = document.querySelector('h2');
+                                if (!h2) return '';
+                                let prev = h2.previousElementSibling;
+                                while(prev && prev.innerText.trim().length === 0) {
+                                    prev = prev.previousElementSibling;
+                                }
+                                return prev ? prev.innerText.trim() : '';
+                            }");
+                            if (!string.IsNullOrEmpty(authorText)) res.Author = authorText;
+
+                            // --- 3. Extract License ---
+                            var licenseEl = await detailPage.QuerySelectorAsync("text=/License/i");
+                            if (licenseEl != null)
                             {
-                                res.DownloadUrl = await finalLink.GetAttributeAsync("href") ?? "Download URL missing";
+                                var text = await licenseEl.InnerTextAsync();
+                                res.License = text.Replace("License", "").Replace(":", "").Trim();
                             }
-                            else
+
+                            // --- 3.1 Extract FontImgUrl ---
+                            var firstImg = await detailPage.QuerySelectorAsync(".entry-content img, article img");
+                            if (firstImg != null) res.FontImgUrl = await firstImg.GetAttributeAsync("src") ?? "";
+
+                            // --- 3.2 Extract LicenseUrl ---
+                            var hereEl = await detailPage.QuerySelectorAsync("strong:has-text('HERE') a, a:has(strong:has-text('HERE'))");
+                            if (hereEl != null) res.LicenseUrl = await hereEl.GetAttributeAsync("href") ?? "";
+                            
+                            // --- 4. Description ---
+                            if (!string.IsNullOrEmpty(config.DescriptionSelector))
                             {
-                                // Maybe the previous button was the direct link after all? 
-                                // Or we failed to find it. Just use current URL or mark not found.
-                                res.DownloadUrl = "Not Found on Page 2";
+                                var descEl = await detailPage.QuerySelectorAsync(config.DescriptionSelector);
+                                if (descEl != null) 
+                                {
+                                    var text = await descEl.InnerTextAsync();
+                                    res.Description = text.Length > 150 ? text.Substring(0, 150).Replace("\n", " ") + "..." : text;
+                                }
                             }
+
+                            // --- 5. Real Download Link ---
+                            string? preDownloadUrl = null;
+                            if (!string.IsNullOrEmpty(config.DownloadButtonSelector))
+                            {
+                                var dlEl = await detailPage.QuerySelectorAsync(config.DownloadButtonSelector);
+                                if (dlEl != null) preDownloadUrl = await dlEl.GetAttributeAsync("href");
+                            }
+
+                            if (!string.IsNullOrEmpty(preDownloadUrl))
+                            {
+                                if (!preDownloadUrl!.StartsWith("http"))
+                                {
+                                    var uri = new Uri(new Uri(res.FontUrl!), preDownloadUrl);
+                                    preDownloadUrl = uri.ToString();
+                                }
+
+                                await detailPage.GotoAsync(preDownloadUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60000 });
+                                try { await detailPage.WaitForTimeoutAsync(settings.ScrapeDelay / 2); } catch { }
+                                
+                                var finalLink = await detailPage.QuerySelectorAsync("a[href$='.zip'], a[href$='.rar'], a[href$='.ttf'], a[href$='.otf']");
+                                if (finalLink == null) finalLink = await detailPage.QuerySelectorAsync("a:has-text('Click here')");
+
+                                if (finalLink != null) res.DownloadUrl = await finalLink.GetAttributeAsync("href") ?? "Download URL missing";
+                                else res.DownloadUrl = "Not Found on Page 2";
+                            }
+                            else res.DownloadUrl = "No Initial Button";
+
+                            lock (settings)
+                            {
+                                settings.ScrapedUrls.Add(res.FontUrl);
+                                settings.Save();
+                            }
+
+                            OnResultFound?.Invoke(res);
+                            await detailPage.WaitForTimeoutAsync(500); 
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            res.DownloadUrl = "No Initial Button";
+                            Log($"Failed detailed scrape for {res.FontName}: {ex.Message}");
                         }
-
-                        // Mark as scraped and save to settings
-                        settings.ScrapedUrls.Add(res.FontUrl);
-                        settings.Save();
-
-                        OnResultFound?.Invoke(res);
-                        // Be nice to the server
-                        await page.WaitForTimeoutAsync(500); 
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"Failed detailed scrape for {res.FontName}: {ex.Message}");
-                    }
+                        finally
+                        {
+                            if (detailPage != null) await detailPage.CloseAsync();
+                            semaphore.Release();
+                        }
+                    }, ct));
                 }
+                
+                await Task.WhenAll(tasks);
 
                 // 4. Save to CSV
                 try 
